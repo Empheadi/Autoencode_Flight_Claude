@@ -34,9 +34,9 @@ function [omega_dot_est, est] = est_compfilt_step(mode, omega_meas, delta, P, es
     A = P.A0 + P.AV * (V - P.V0);                              % 3×3
     B = P.B0_ctrl + P.BV * (V - P.V0);                         % 3×3 (controller's B)
 
-    M_model = A * omega_meas + B * delta ...
-            - cross(omega_meas, P.I * omega_meas);              % 3×1
-    omega_dot_model = P.I \ M_model;                            % 3×1
+    % A0, B0 are acceleration-level; gyroscopic term is torque/I
+    omega_dot_model = A * omega_meas + B * delta ...
+            - P.I \ cross(omega_meas, P.I * omega_meas);       % 3×1
 
     % ---- Blend ----
     alpha = P.est_cf_alpha;   % 0 = pure model, 1 = pure derivative

@@ -3,6 +3,10 @@ function [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist)
 %
 %   [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist)
 %
+%   A0 and B0 are acceleration-level matrices (rad/s^2 units), so the aero
+%   contribution is computed directly as omega_dot_aero = A*omega + B*delta.
+%   Gyroscopic torque and disturbance torque (Nm) are divided by I.
+%
 %   Inputs:
 %     S             — state struct with fields:
 %                       .omega  (3×1) angular rate (rad/s)
@@ -15,27 +19,28 @@ function [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist)
 %     S_next          — updated state struct
 %     omega_dot_true  — true angular acceleration (3×1, rad/s^2)
 
-    % Speed-scheduled aero matrices
+    % Speed-scheduled aero matrices (acceleration-level)
     V = S.V;
-    A = P.A0 + P.AV * (V - P.V0);           % 3×3
-    B = P.B0 + P.BV * (V - P.V0);           % 3×3
+    A = P.A0 + P.AV * (V - P.V0);           % 3×3, (1/s)
+    B = P.B0 + P.BV * (V - P.V0);           % 3×3, (rad/s^2 / rad)
 
-    % Aerodynamic moment
-    M_aero = A * S.omega + B * delta_actual; % 3×1
+    % Aerodynamic acceleration (A0, B0 already in rad/s^2 units)
+    omega_dot_aero = A * S.omega + B * delta_actual;   % 3×1, rad/s^2
 
-    % Nonlinear (cubic) damping
-    M_nl = -P.mu_nl * (norm(S.omega)^2) * S.omega;  % 3×1
+    % Nonlinear (cubic) damping — acceleration level
+    omega_dot_nl = -P.mu_nl * (norm(S.omega)^2) * S.omega;  % 3×1
 
-    % Gyroscopic torque:  omega × (I * omega)
-    M_gyro = cross(S.omega, P.I * S.omega);  % 3×1
+    % Gyroscopic torque → acceleration:  I\(omega × (I*omega))
+    omega_dot_gyro = P.I \ cross(S.omega, P.I * S.omega);   % 3×1
 
-    % Total torque
-    M_total = M_aero + M_nl + dist - M_gyro; % 3×1
+    % Disturbance torque (Nm) → acceleration
+    omega_dot_dist = P.I \ dist;                             % 3×1
 
-    % Angular acceleration  (I * omega_dot = M_total)
-    omega_dot_true = P.I \ M_total;          % 3×1
+    % Total angular acceleration
+    omega_dot_true = omega_dot_aero + omega_dot_nl ...
+                   + omega_dot_dist - omega_dot_gyro;        % 3×1
 
     % Forward Euler integration
     S_next.omega = S.omega + P.dt * omega_dot_true;  % 3×1
-    S_next.V     = V;                        % constant airspeed
+    S_next.V     = V;                                % constant airspeed
 end
