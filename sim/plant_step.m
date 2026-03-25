@@ -1,11 +1,12 @@
-function [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist)
+function [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist, dist_accel)
 % PLANT_STEP  Advance the rigid-body plant by one time step (forward Euler).
 %
-%   [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist)
+%   [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist, dist_accel)
 %
 %   A0 and B0 are acceleration-level matrices (rad/s^2 units), so the aero
 %   contribution is computed directly as omega_dot_aero = A*omega + B*delta.
 %   Gyroscopic torque and disturbance torque (Nm) are divided by I.
+%   dist_accel is added directly (already in rad/s^2).
 %
 %   Inputs:
 %     S             — state struct with fields:
@@ -14,6 +15,7 @@ function [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist)
 %     delta_actual  — actual actuator deflections (3×1, rad)
 %     P             — parameter struct (from init_params)
 %     dist          — external disturbance torque (3×1, Nm)
+%     dist_accel    — (optional) acceleration-level disturbance (3×1, rad/s^2)
 %
 %   Outputs:
 %     S_next          — updated state struct
@@ -35,6 +37,11 @@ function [S_next, omega_dot_true] = plant_step(S, delta_actual, P, dist)
 
     % Disturbance torque (Nm) → acceleration
     omega_dot_dist = P.I \ dist;                             % 3×1
+
+    % Acceleration-level disturbance (bypasses inertia)
+    if nargin >= 5 && ~isempty(dist_accel)
+        omega_dot_dist = omega_dot_dist + dist_accel;        % 3×1
+    end
 
     % Total angular acceleration
     omega_dot_true = omega_dot_aero + omega_dot_nl ...

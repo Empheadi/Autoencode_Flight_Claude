@@ -3,24 +3,8 @@ function L = run_episode(P, estimator_handle, omega_cmd_fun)
 %
 %   L = run_episode(P, estimator_handle, omega_cmd_fun)
 %
-%   Inputs:
-%     P                — parameter struct (from init_params)
-%     estimator_handle — function handle with signature:
-%                          [omega_dot_est, est] = f(mode, omega_meas, delta, P, est)
-%                        mode is 'init' or 'step'
-%     omega_cmd_fun    — function handle: omega_cmd = f(t), returns 3×1 (rad/s)
-%
-%   Output:
-%     L — log struct with fields (all time-series stored column-wise):
-%           t               1×N   time (s)
-%           omega_true      3×N   true angular rate
-%           omega_meas      3×N   measured angular rate
-%           omega_dot_true  3×N   true angular acceleration
-%           omega_dot_est   3×N   estimated angular acceleration
-%           delta_cmd       3×N   commanded actuator
-%           delta_true      3×N   actual actuator
-%           omega_cmd       3×N   rate command
-%           dist            3×N   disturbance torque
+%   Supports acceleration-level disturbance (P.dist_accel_std) and
+%   time-varying B0_ctrl (P.B0_ctrl_schedule).
 
     % Number of time steps
     N = round(P.T / P.dt);
@@ -44,41 +28,55 @@ function L = run_episode(P, estimator_handle, omega_cmd_fun)
     % Sensor bias (drawn once, held constant)
     bias = P.gyro_bias_std .* randn(3, 1);
 
+    % Make a local copy of P for time-varying parameters
+    P_local = P;
+
     % Initialize estimator
-    [~, est_state] = estimator_handle('init', [], [], P, []);
+    [~, est_state] = estimator_handle('init', [], [], P_local, []);
 
     % Controller state
     ctrl = struct();
 
     % Disturbance filter state
-    dist_state.x = zeros(3, 1);
+    dist_state.x  = zeros(3, 1);
+    dist_state.xa = zeros(3, 1);
+
+    % Check for time-varying B0_ctrl schedule
+    has_schedule = isfield(P, 'B0_ctrl_schedule');
 
     % ---- Main simulation loop ----
     for k = 1:N
         t = (k - 1) * P.dt;
 
+        % Time-varying B0_ctrl (linear interpolation over episode)
+        if has_schedule
+            frac = (k - 1) / (N - 1);
+            P_local.B0_ctrl = P.B0_ctrl_schedule.start ...
+                + frac * (P.B0_ctrl_schedule.finish - P.B0_ctrl_schedule.start);
+        end
+
         % Rate command
         omega_cmd = omega_cmd_fun(t);                               % 3×1
 
         % Sensor measurement
-        omega_meas = sensor_step(S.omega, bias, P);                 % 3×1
+        omega_meas = sensor_step(S.omega, bias, P_local);           % 3×1
 
-        % Disturbance
-        [dist, dist_state] = disturbance_step(t, P, dist_state);    % 3×1
+        % Disturbance (torque + acceleration-level)
+        [dist, dist_accel, dist_state] = disturbance_step(t, P_local, dist_state);
 
         % Estimator
         [omega_dot_est, est_state] = estimator_handle('step', ...
-            omega_meas, delta, P, est_state);                       % 3×1
+            omega_meas, delta, P_local, est_state);                 % 3×1
 
         % Controller
         [delta_cmd, ctrl] = indi_controller_step(omega_meas, ...
-            omega_cmd, omega_dot_est, delta, P, ctrl);              % 3×1
+            omega_cmd, omega_dot_est, delta, P_local, ctrl);        % 3×1
 
         % Actuator dynamics
-        delta = actuator_step(delta, delta_cmd, P);                 % 3×1
+        delta = actuator_step(delta, delta_cmd, P_local);           % 3×1
 
-        % Plant dynamics
-        [S, omega_dot_true] = plant_step(S, delta, P, dist);       % 3×1
+        % Plant dynamics (with acceleration-level disturbance)
+        [S, omega_dot_true] = plant_step(S, delta, P_local, dist, dist_accel);
 
         % Log
         L.t(k)                = t;

@@ -44,9 +44,10 @@ function P = init_params()
     P.gyro_quantize  = deg2rad(0.005);               % quantization step (rad/s)
 
     % ---- Disturbance torque ----
-    P.dist_type = 'band_limited';            % 'none','step','band_limited','sinusoidal'
-    P.dist_std  = [5; 5; 3];                % Nm, per-axis std             3×1
-    P.dist_bw   = 10;                        % bandwidth (Hz)
+    P.dist_type      = 'band_limited';       % 'none','step','band_limited','sinusoidal','ramp'
+    P.dist_std       = [5; 5; 3];            % Nm, per-axis std             3×1
+    P.dist_bw        = 10;                   % bandwidth (Hz)
+    P.dist_accel_std = [0; 0; 0];            % acceleration-level disturbance (rad/s^2), bypasses I
 
     % ---- INDI rate-loop controller ----
     P.K_rate   = diag([15, 12, 8]);          % proportional rate gains      3×3
