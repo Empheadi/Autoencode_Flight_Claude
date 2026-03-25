@@ -9,8 +9,8 @@ function [net, info] = train_gru_residual(X_train, Y_train, X_val, Y_val, option
 %     X_val   — validation inputs
 %     Y_val   — validation targets
 %     options — (optional) struct with fields:
-%                 .maxEpochs       (default 50)
-%                 .miniBatchSize   (default 128)
+%                 .maxEpochs       (default 20)
+%                 .miniBatchSize   (default 512)
 %                 .initialLR       (default 1e-3)
 %
 %   Outputs:
@@ -18,8 +18,8 @@ function [net, info] = train_gru_residual(X_train, Y_train, X_val, Y_val, option
 %     info — struct with training history (loss per epoch)
 
     if nargin < 5, options = struct(); end
-    maxEpochs     = getOr(options, 'maxEpochs', 50);
-    miniBatchSize = getOr(options, 'miniBatchSize', 128);
+    maxEpochs     = getOr(options, 'maxEpochs', 20);
+    miniBatchSize = getOr(options, 'miniBatchSize', 512);
     initialLR     = getOr(options, 'initialLR', 1e-3);
 
     [numCh, Nwin, numTrain] = size(X_train);
@@ -34,13 +34,22 @@ function [net, info] = train_gru_residual(X_train, Y_train, X_val, Y_val, option
     iteration = 0;
 
     % Learning rate schedule
-    lrDropPeriod = 15;
+    lrDropPeriod = 8;
     lrDropFactor = 0.5;
 
     info.trainLoss = zeros(1, maxEpochs);
     info.valLoss   = zeros(1, maxEpochs);
 
+    % Cap validation samples to avoid OOM
+    maxValSamples = min(numVal, 5000);
+    valIdx = randperm(numVal, maxValSamples);
+
+    fprintf('  Training: %d samples, %d batches/epoch (batch=%d)\n', ...
+        numTrain, ceil(numTrain / miniBatchSize), miniBatchSize);
+
     for epoch = 1:maxEpochs
+        tic;
+
         % Shuffle training data
         perm = randperm(numTrain);
 
@@ -71,16 +80,22 @@ function [net, info] = train_gru_residual(X_train, Y_train, X_val, Y_val, option
 
         info.trainLoss(epoch) = epochLoss / numBatches;
 
-        % Validation loss
-        X_v = dlarray(X_val, 'CTB');
-        Y_v = dlarray(Y_val, 'CB');
-        valLoss = dlfeval(@modelLoss, net, X_v, Y_v);
-        info.valLoss(epoch) = extractdata(valLoss);
-
-        if mod(epoch, 5) == 0 || epoch == 1
-            fprintf('Epoch %3d/%d  Train MSE: %.6f  Val MSE: %.6f  LR: %.1e\n', ...
-                epoch, maxEpochs, info.trainLoss(epoch), info.valLoss(epoch), lr);
+        % Validation loss (on subset, in batches to avoid OOM)
+        valLoss = 0;
+        valBatches = 0;
+        for vb = 1:miniBatchSize:maxValSamples
+            vidx = valIdx(vb:min(vb + miniBatchSize - 1, maxValSamples));
+            X_v = dlarray(X_val(:, :, vidx), 'CTB');
+            Y_v = dlarray(Y_val(:, vidx), 'CB');
+            vl = forward(net, X_v);
+            valLoss = valLoss + extractdata(mean((vl - Y_v).^2, 'all'));
+            valBatches = valBatches + 1;
         end
+        info.valLoss(epoch) = valLoss / valBatches;
+
+        elapsed = toc;
+        fprintf('Epoch %3d/%d  Train: %.6f  Val: %.6f  LR: %.1e  (%.1fs)\n', ...
+            epoch, maxEpochs, info.trainLoss(epoch), info.valLoss(epoch), lr, elapsed);
     end
 end
 
