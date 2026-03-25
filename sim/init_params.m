@@ -36,9 +36,12 @@ function P = init_params()
     P.rate_max  = deg2rad([80; 60; 80]);     % rate limits (rad/s)          3×1
 
     % ---- Sensor model ----
-    P.gyro_noise_std = deg2rad([0.5; 0.5; 0.3]);    % white noise std (rad/s)  3×1
-    P.gyro_bias_std  = deg2rad([0.02; 0.02; 0.01]); % per-episode bias std     3×1
-    P.gyro_quantize  = deg2rad(0.01);                % quantization step (rad/s)
+    % Realistic UAV-grade MEMS gyro noise levels.
+    % Previous values (0.5, 0.5, 0.3 deg/s) were too large — noise
+    % amplification in backward-difference made INDI unusable.
+    P.gyro_noise_std = deg2rad([0.1; 0.1; 0.08]);   % white noise std (rad/s)  3×1
+    P.gyro_bias_std  = deg2rad([0.01; 0.01; 0.005]); % per-episode bias std    3×1
+    P.gyro_quantize  = deg2rad(0.005);               % quantization step (rad/s)
 
     % ---- Disturbance torque ----
     P.dist_type = 'band_limited';            % 'none','step','band_limited','sinusoidal'
@@ -50,7 +53,7 @@ function P = init_params()
     P.B0_ctrl  = P.B0;                       % controller's copy of B0      3×3
 
     % ---- Estimator tuning ----
-    P.est_lpf_alpha = 0.85;                  % LPF coefficient for backdiff
+    P.est_lpf_alpha = 0.95;                  % LPF coefficient for backdiff
     P.est_eso_bw    = 50;                    % ESO bandwidth (rad/s)
     P.est_cf_alpha  = 0.7;                   % complementary filter blend
 
