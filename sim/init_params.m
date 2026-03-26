@@ -42,6 +42,7 @@ function P = init_params()
     P.gyro_noise_std = deg2rad([0.1; 0.1; 0.08]);   % white noise std (rad/s)  3×1
     P.gyro_bias_std  = deg2rad([0.01; 0.01; 0.005]); % per-episode bias std    3×1
     P.gyro_quantize  = deg2rad(0.005);               % quantization step (rad/s)
+    P.sensor_delay   = 0;                            % sensor/computation delay (samples)
 
     % ---- Disturbance torque ----
     P.dist_type      = 'band_limited';       % 'none','step','band_limited','sinusoidal','ramp'

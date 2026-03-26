@@ -31,6 +31,13 @@ function L = run_episode(P, estimator_handle, omega_cmd_fun)
     % Make a local copy of P for time-varying parameters
     P_local = P;
 
+    % Sensor delay buffer
+    delay_steps = 0;
+    if isfield(P, 'sensor_delay')
+        delay_steps = P.sensor_delay;
+    end
+    delay_buf = zeros(3, delay_steps + 1);  % ring buffer for delayed measurements
+
     % Initialize estimator
     [~, est_state] = estimator_handle('init', [], [], P_local, []);
 
@@ -58,8 +65,14 @@ function L = run_episode(P, estimator_handle, omega_cmd_fun)
         % Rate command
         omega_cmd = omega_cmd_fun(t);                               % 3×1
 
-        % Sensor measurement
-        omega_meas = sensor_step(S.omega, bias, P_local);           % 3×1
+        % Sensor measurement (with optional delay)
+        omega_meas_raw = sensor_step(S.omega, bias, P_local);       % 3×1
+        if delay_steps > 0
+            delay_buf = [delay_buf(:, 2:end), omega_meas_raw];
+            omega_meas = delay_buf(:, 1);   % oldest sample in buffer
+        else
+            omega_meas = omega_meas_raw;
+        end
 
         % Disturbance (torque + acceleration-level)
         [dist, dist_accel, dist_state] = disturbance_step(t, P_local, dist_state);

@@ -27,6 +27,25 @@ function L = generate_run(P, seed)
     P_run.dist_std = P.dist_std .* (0.5 + rand);
     P_run.dist_std = max(P_run.dist_std, 0);
 
+    % Randomize model mismatch: B0_ctrl differs from true B0 by up to ±30%
+    mismatch_factor = 0.7 + 0.6 * rand;                   % ∈ [0.7, 1.3]
+    P_run.B0_ctrl = P_run.B0 * mismatch_factor;
+
+    % Randomize acceleration-level disturbance (50% chance of being active)
+    if rand > 0.5
+        P_run.dist_accel_std = [2; 1.5; 1] .* (0.5 + rand);
+    else
+        P_run.dist_accel_std = [0; 0; 0];
+    end
+
+    % Randomize sensor delay (0–3 steps)
+    P_run.sensor_delay = randi([0, 3]);
+
+    % Randomize gyro noise level more aggressively for some runs
+    if rand > 0.7
+        P_run.gyro_noise_std = P_run.gyro_noise_std * (1.5 + rand);
+    end
+
     % ---- Random excitation command ----
     omega_cmd_fun = make_random_excitation(P_run);
 

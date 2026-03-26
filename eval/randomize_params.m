@@ -25,4 +25,14 @@ function P_mc = randomize_params(P)
 
     P_mc.dist_std = P.dist_std .* (0.5 + 1.5*rand);
     P_mc.dist_std = max(P_mc.dist_std, 0);
+
+    % Randomize sensor delay (0–3 steps)
+    P_mc.sensor_delay = randi([0, 3]);
+
+    % Randomize acceleration-level disturbance
+    if rand > 0.5
+        P_mc.dist_accel_std = [2; 1.5; 1] .* (0.5 + rand);
+    else
+        P_mc.dist_accel_std = [0; 0; 0];
+    end
 end
